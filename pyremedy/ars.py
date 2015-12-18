@@ -4,6 +4,7 @@ from ctypes import (
     c_void_p, POINTER
 )
 from datetime import datetime
+import os
 
 from . import arh
 from .exceptions import ARSError
@@ -28,10 +29,16 @@ class ARS(object):
     def __init__(self, server, user, password, port=0, rpc_program_number=0):
         #: The Remedy ARS C API shared object file which is used to interact
         #: with the Remedy server
-        self.arlib = CDLL('libar_lx64.so')
+        if os.name == 'posix':
+            self.arlib = CDLL('libar_lx64.so')
+        elif os.name == 'nt':
+            self.arlib = CDLL('arapi81_build001_win64')
 
         #: The standard C library used to run several lower-lever C functions
-        self.clib = CDLL('libc.so.6')
+        if os.name == 'posix':
+            self.clib = CDLL('libc.so.6')
+        elif os.name == 'nt':
+            self.clib = CDLL('msvcrt')
 
         #: The control record for each operation containing details about the
         #: user and session performing each operation
@@ -304,8 +311,12 @@ class ARS(object):
                 byref(self.status)
             ) >= arh.AR_RETURN_ERROR
         ):
-            self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
-            self.arlib.FreeARInternalIdList(byref(internal_id_list), arh.FALSE)
+            if os.name == 'nt':
+                self.clib.free(entry_id_list.entryIdList)
+                self.clib.free(internal_id_list.internalIdList)
+            else:
+                self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
+                self.arlib.FreeARInternalIdList(byref(internal_id_list), arh.FALSE)
             self.arlib.FreeARFieldValueList(byref(field_value_list), arh.FALSE)
             self.arlib.FreeARStatusList(byref(self.status), arh.FALSE)
             raise ARSError(
@@ -335,8 +346,13 @@ class ARS(object):
                 self.arlib.FreeARStatusList(byref(self.status), arh.FALSE)
                 raise
 
-        self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
-        self.arlib.FreeARInternalIdList(byref(internal_id_list), arh.FALSE)
+        #windows doesn't like the FreeAREntryIDList and FreeARInternalIdList, so we'll free the memory manually
+        if os.name == 'nt':
+            self.clib.free(entry_id_list.entryIdList)
+            self.clib.free(internal_id_list.internalIdList)
+        else:
+            self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
+            self.arlib.FreeARInternalIdList(byref(internal_id_list), arh.FALSE)
         self.arlib.FreeARFieldValueList(byref(field_value_list), arh.FALSE)
         self.arlib.FreeARStatusList(byref(self.status), arh.FALSE)
 
@@ -480,7 +496,10 @@ class ARS(object):
             self.arlib.FreeARQualifierStruct(
                 byref(qualifier_struct), arh.FALSE
             )
-            self.arlib.FreeAREntryListFieldList(byref(field_list), arh.FALSE)
+            if os.name == 'nt':
+                self.clib.free(field_list.fieldsList)
+            else:
+                self.arlib.FreeAREntryListFieldList(byref(field_list), arh.FALSE)
             self.arlib.FreeAREntryListFieldValueList(
                 byref(entry_list), arh.FALSE
             )
@@ -499,9 +518,12 @@ class ARS(object):
                 self.arlib.FreeARQualifierStruct(
                     byref(qualifier_struct), arh.FALSE
                 )
-                self.arlib.FreeAREntryListFieldList(
-                    byref(field_list), arh.FALSE
-                )
+                if os.name == 'nt':
+                    self.clib.free(field_list.fieldsList)
+                else:
+                    self.arlib.FreeAREntryListFieldList(
+                        byref(field_list), arh.FALSE
+                    )
                 self.arlib.FreeAREntryListFieldValueList(
                     byref(entry_list), arh.FALSE
                 )
@@ -532,9 +554,12 @@ class ARS(object):
                     self.arlib.FreeARQualifierStruct(
                         byref(qualifier_struct), arh.FALSE
                     )
-                    self.arlib.FreeAREntryListFieldList(
-                        byref(field_list), arh.FALSE
-                    )
+                    if os.name == 'nt':
+                        self.clib.free(field_list.fieldList)
+                    else:
+                        self.arlib.FreeAREntryListFieldList(
+                            byref(field_list), arh.FALSE
+                        )
                     self.arlib.FreeAREntryListFieldValueList(
                         byref(entry_list), arh.FALSE
                     )
@@ -544,7 +569,10 @@ class ARS(object):
             entries.append((entry_id, entry_values))
 
         self.arlib.FreeARQualifierStruct(byref(qualifier_struct), arh.FALSE)
-        self.arlib.FreeAREntryListFieldList(byref(field_list), arh.FALSE)
+        if os.name == 'nt':
+            self.clib.free(field_list.fieldsList)
+        else:
+            self.arlib.FreeAREntryListFieldList(byref(field_list), arh.FALSE)
         self.arlib.FreeAREntryListFieldValueList(byref(entry_list), arh.FALSE)
         self.arlib.FreeARStatusList(byref(self.status), arh.FALSE)
 
@@ -615,9 +643,12 @@ class ARS(object):
             ) >= arh.AR_RETURN_ERROR
         ):
             self._update_errors(schema)
-            self.arlib.FreeARFieldValueList(
-                byref(field_value_list), arh.FALSE
-            )
+            if os.name == 'nt':
+                self.clib.free(field_value_list.fieldValueList)
+            else:
+                self.arlib.FreeARFieldValueList(
+                    byref(field_value_list), arh.FALSE
+                )
             self.arlib.FreeARStatusList(byref(self.status), arh.FALSE)
             raise ARSError(
                 'Unable to create a new entry for schema {}'.format(schema)
@@ -709,8 +740,12 @@ class ARS(object):
             ) >= arh.AR_RETURN_ERROR
         ):
             self._update_errors(schema)
-            self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
-            self.arlib.FreeARFieldValueList(byref(field_value_list), arh.FALSE)
+            id os.name == 'nt':
+                self.clib.free(entry_id_list.entryIdList)
+                self.clib.free(field_list.fieldsList)
+            else:
+                self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
+                self.arlib.FreeARFieldValueList(byref(field_value_list), arh.FALSE)
             self.arlib.FreeARStatusList(byref(self.status), arh.FALSE)
             raise ARSError(
                 'Unable to modify entry id {} for schema {}'.format(
@@ -718,8 +753,12 @@ class ARS(object):
                 )
             )
 
-        self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
-        self.arlib.FreeARFieldValueList(byref(field_value_list), arh.FALSE)
+        if os.name == 'nt':
+            self.clib.free(entry_id_list.entryIdList)
+            self.clib.free(field_list.fieldsList)
+        else:
+            self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
+            self.arlib.FreeARFieldValueList(byref(field_value_list), arh.FALSE)
         self.arlib.FreeARStatusList(byref(self.status), arh.FALSE)
 
     def delete(self, schema, entry_id):
@@ -764,15 +803,20 @@ class ARS(object):
             ) >= arh.AR_RETURN_ERROR
         ):
             self._update_errors()
-            self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
+            if os.name == 'nt':
+                self.clib.free(entry_id_list.entryIdList)
+            else:
+                self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
             self.arlib.FreeARStatusList(byref(self.status), arh.FALSE)
             raise ARSError(
                 'Unable to delete entry id {} for schema {}'.format(
                     entry_id, schema
                 )
             )
-
-        self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
+        if os.name == 'nt':
+            self.clib.free(entry_id_list.entryIdList)
+        else:
+            self.arlib.FreeAREntryIdList(byref(entry_id_list), arh.FALSE)
         self.arlib.FreeARStatusList(byref(self.status), arh.FALSE)
 
     def update_fields(self, schema):
@@ -998,6 +1042,9 @@ class ARS(object):
     def _register_clib_functions(self):
         """Explicitly define argument and return types for C functions"""
         # strdup (string.h)
+        if os.name == 'nt':
+            # strdup is deprecated in msvcrt and renamed to _strdup
+            self.clib.strdup = self.clib._strdup
         self.clib.strdup.argtypes = [c_char_p]
         # Please note that the return value of strdup is actually char * but
         # we can't use this or Python will convert the result into a Python
