@@ -740,7 +740,7 @@ class ARS(object):
             ) >= arh.AR_RETURN_ERROR
         ):
             self._update_errors(schema)
-            id os.name == 'nt':
+            if os.name == 'nt':
                 self.clib.free(entry_id_list.entryIdList)
                 self.clib.free(field_list.fieldsList)
             else:
